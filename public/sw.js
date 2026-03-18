@@ -1,4 +1,4 @@
-const CACHE_NAME = 'meseros-v1.0.1';
+const CACHE_NAME = 'meseros-v1.0.2';
 const urlsToCache = ['/'];
 
 self.addEventListener('install', event => {
