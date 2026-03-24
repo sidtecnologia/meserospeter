@@ -58,55 +58,20 @@ export default function App() {
   const finalizeOrder = async (details) => {
     try {
       const isTable = details.table !== 'PARA LLEVAR';
+      const tableId = isTable ? details.table.replace(/\D/g, '') : 'PARA LLEVAR';
       const orderTotal = cart.reduce((acc, i) => acc + (i.price * i.qty), 0);
-      const tableId = details.table.replace(/\D/g, '');
+      const notes = cart.map(i => i.note).filter(Boolean).join(' | ');
 
-      if (isTable) {
-        const { data: session } = await supabase
-          .from('table_sessions')
-          .select('*')
-          .eq('table_number', tableId)
-          .eq('status', 'open')
-          .maybeSingle();
+      const { error } = await supabase.from('orders').insert([{
+        customer_name: details.name,
+        customer_address: tableId,
+        total_amount: orderTotal,
+        order_items: cart,
+        order_status: 'Pendiente',
+        observation: notes
+      }]);
 
-        if (session) {
-          await supabase
-            .from('table_sessions')
-            .update({
-              items: [...(session.items || []), ...cart],
-              total: Number(session.total || 0) + orderTotal,
-              order_status: 'Pendiente'
-            })
-            .eq('id', session.id);
-        } else {
-          await supabase
-            .from('table_sessions')
-            .insert([{
-              table_number: tableId,
-              customer_name: details.name,
-              items: cart,
-              total: orderTotal,
-              status: 'open',
-              order_status: 'Pendiente'
-            }]);
-        }
-
-        await supabase.from('orders').insert([{
-          customer_name: details.name,
-          customer_address: tableId,
-          total_amount: orderTotal,
-          order_items: cart,
-          order_status: 'Pendiente'
-        }]);
-      } else {
-        await supabase.from('orders').insert([{
-          customer_name: details.name,
-          customer_address: 'PARA LLEVAR',
-          total_amount: orderTotal,
-          order_items: cart,
-          order_status: 'Pendiente'
-        }]);
-      }
+      if (error) throw error;
 
       setSuccessMsg('¡PEDIDO ENVIADO!');
       setCart([]);
