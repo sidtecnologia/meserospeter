@@ -57,37 +57,88 @@ export default function App() {
 
   const finalizeOrder = async (details) => {
     try {
-      const { error } = await supabase.from('orders').insert([{
-        customer_name: details.name,
-        customer_address: details.table,
-        total_amount: cart.reduce((acc, i) => acc + (i.price * i.qty), 0),
-        order_items: cart,
-        order_status: 'Pendiente'
-      }]);
-      if (error) throw error;
+      const isTable = details.table !== 'PARA LLEVAR';
+      const orderTotal = cart.reduce((acc, i) => acc + (i.price * i.qty), 0);
+      const tableId = details.table.replace(/\D/g, '');
+
+      if (isTable) {
+        const { data: session } = await supabase
+          .from('table_sessions')
+          .select('*')
+          .eq('table_number', tableId)
+          .eq('status', 'open')
+          .maybeSingle();
+
+        if (session) {
+          await supabase
+            .from('table_sessions')
+            .update({
+              items: [...(session.items || []), ...cart],
+              total: Number(session.total || 0) + orderTotal,
+              order_status: 'Pendiente'
+            })
+            .eq('id', session.id);
+        } else {
+          await supabase
+            .from('table_sessions')
+            .insert([{
+              table_number: tableId,
+              customer_name: details.name,
+              items: cart,
+              total: orderTotal,
+              status: 'open',
+              order_status: 'Pendiente'
+            }]);
+        }
+
+        await supabase.from('orders').insert([{
+          customer_name: details.name,
+          customer_address: tableId,
+          total_amount: orderTotal,
+          order_items: cart,
+          order_status: 'Pendiente'
+        }]);
+      } else {
+        await supabase.from('orders').insert([{
+          customer_name: details.name,
+          customer_address: 'PARA LLEVAR',
+          total_amount: orderTotal,
+          order_items: cart,
+          order_status: 'Pendiente'
+        }]);
+      }
+
       setSuccessMsg('¡PEDIDO ENVIADO!');
       setCart([]);
       setIsCheckoutOpen(false);
       setTimeout(() => setSuccessMsg(''), 3000);
-    } catch (err) { alert(err.message); }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center font-black text-primary animate-pulse italic">CARGANDO MENÚ...</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center font-black text-primary animate-pulse italic uppercase tracking-tighter">Cargando Menú...</div>;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-32">
-      {successMsg && <div className="fixed top-8 inset-x-8 bg-green-600 text-white p-6 rounded-[2rem] shadow-2xl z-[200] text-center font-black animate-bounce text-xl italic">{successMsg}</div>}
+      {successMsg && (
+        <div className="fixed top-8 inset-x-8 bg-emerald-600 text-white p-6 rounded-[2rem] shadow-2xl z-[200] text-center font-black animate-bounce text-xl italic uppercase tracking-tighter">
+          {successMsg}
+        </div>
+      )}
 
       <header className="bg-primary text-white sticky top-0 z-[40] px-6 py-8 rounded-b-[3.5rem] shadow-2xl">
         <div className="max-w-7xl mx-auto space-y-6">
           <div className="flex items-center justify-between">
-            <h1 className="font-black text-3xl tracking-tighter italic flex items-center gap-2"><UtensilsCrossed size={32}/> ComidaRápida</h1>
-            <div className="bg-white/20 p-3 rounded-2xl text-[10px] font-black uppercase tracking-widest">Panel de Meseros</div>
+            <h1 className="font-black text-3xl tracking-tighter italic flex items-center gap-2">
+              <UtensilsCrossed size={32}/> ComidaRápida
+            </h1>
+            <div className="bg-white/20 p-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-white/10 backdrop-blur-sm">Panel de Meseros</div>
           </div>
           <div className="relative">
             <input 
               type="text" placeholder="Buscar plato..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full bg-white pl-14 pr-6 py-5 rounded-[2rem] text-gray-900 font-black shadow-inner outline-none focus:ring-4 focus:ring-blue-400 transition-all"
+              className="w-full bg-white pl-14 pr-6 py-5 rounded-[2rem] text-gray-900 font-black shadow-inner outline-none focus:ring-4 focus:ring-blue-400 transition-all placeholder:text-gray-300"
             />
             <Search className="absolute left-6 top-5 text-gray-400" size={28} />
           </div>
@@ -124,7 +175,7 @@ export default function App() {
 
       <button 
         onClick={() => setIsCartOpen(true)}
-        className={`fixed bottom-10 right-10 p-7 rounded-[2.5rem] shadow-2xl z-40 flex items-center gap-5 transition-all active:scale-90 ${cart.length > 0 ? 'bg-primary text-white scale-110' : 'bg-white text-gray-300'}`}
+        className={`fixed bottom-10 right-10 p-7 rounded-[2.5rem] shadow-2xl z-40 flex items-center gap-5 transition-all active:scale-90 ${cart.length > 0 ? 'bg-primary text-white scale-110' : 'bg-white text-gray-300 pointer-events-none opacity-0'}`}
       >
         <div className="relative">
           <ShoppingCart size={36} />
